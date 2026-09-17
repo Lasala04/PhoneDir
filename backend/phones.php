@@ -122,6 +122,25 @@ function handleImageUpload(): ?string {
     return 'http://' . $host . $base . '/uploads/' . $name;
 }
 
+/**
+ * Delete a previously-uploaded image so replaced/removed photos don't pile up.
+ * Only ever removes a plain filename inside our own uploads/ folder — external
+ * URLs and any path traversal are ignored, so it can't touch anything else.
+ */
+function deleteImageFile(?string $url): void {
+    if (!$url || strpos($url, '/uploads/') === false) {
+        return;
+    }
+    $file = basename(parse_url($url, PHP_URL_PATH) ?? '');
+    if ($file === '' || $file === '.' || $file === '..') {
+        return;
+    }
+    $path = __DIR__ . '/uploads/' . $file;
+    if (is_file($path)) {
+        @unlink($path);
+    }
+}
+
 // Resolve the effective method, honouring the _method override tunnel.
 $method = $_SERVER['REQUEST_METHOD'];
 if ($method === 'POST' && isset($_POST['_method'])) {
@@ -176,6 +195,16 @@ try {
         case 'PUT': // update
             $id = requireId();
             $p = readPhoneInput();
+
+            // Load the existing image so we can clean it up if it changes.
+            $existing = $pdo->prepare('SELECT image_url FROM phones WHERE id = :id');
+            $existing->execute([':id' => $id]);
+            $existingRow = $existing->fetch();
+            if (!$existingRow) {
+                respond(404, ['success' => false, 'message' => 'Phone not found.']);
+            }
+            $oldImage = $existingRow['image_url'] ?? '';
+
             $uploaded = handleImageUpload();
             if ($uploaded !== null) {
                 $p['image_url'] = $uploaded;
@@ -195,14 +224,12 @@ try {
                 ':image_url'   => $p['image_url'],
                 ':id'          => $id,
             ]);
-            if ($stmt->rowCount() === 0) {
-                // Row may be unchanged or missing; confirm existence.
-                $check = $pdo->prepare('SELECT id FROM phones WHERE id = :id');
-                $check->execute([':id' => $id]);
-                if (!$check->fetch()) {
-                    respond(404, ['success' => false, 'message' => 'Phone not found.']);
-                }
+
+            // If the image was replaced or removed, drop the old file.
+            if ($oldImage !== '' && $oldImage !== $p['image_url']) {
+                deleteImageFile($oldImage);
             }
+
             respond(200, [
                 'success' => true,
                 'message' => 'Phone updated successfully.',
@@ -212,11 +239,19 @@ try {
 
         case 'DELETE': // delete
             $id = requireId();
-            $stmt = $pdo->prepare('DELETE FROM phones WHERE id = :id');
-            $stmt->execute([':id' => $id]);
-            if ($stmt->rowCount() === 0) {
+
+            // Grab the image first so we can remove its file after deleting.
+            $existing = $pdo->prepare('SELECT image_url FROM phones WHERE id = :id');
+            $existing->execute([':id' => $id]);
+            $existingRow = $existing->fetch();
+            if (!$existingRow) {
                 respond(404, ['success' => false, 'message' => 'Phone not found.']);
             }
+
+            $stmt = $pdo->prepare('DELETE FROM phones WHERE id = :id');
+            $stmt->execute([':id' => $id]);
+            deleteImageFile($existingRow['image_url'] ?? '');
+
             respond(200, ['success' => true, 'message' => 'Phone deleted successfully.']);
             break;
 
