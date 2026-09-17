@@ -1,0 +1,20 @@
+RewriteEngine On
+
+# Forward the Authorization header so $_SERVER['HTTP_AUTHORIZATION'] is populated.
+# Freehostia runs PHP as CGI/FastCGI, which drops this header unless we pass it
+# through explicitly. Without this, every request returns 401.
+RewriteCond %{HTTP:Authorization} ^(.*)
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%1]
+
+# Force HTTPS (the app should call https:// directly to avoid this redirect on POST).
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Block direct browser access to sensitive files.
+<FilesMatch "^(connection|auth)\.php$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# Disable directory listing.
+Options -Indexes
