@@ -1,6 +1,8 @@
 import { Phone } from '@/types/phone';
 
-const BASE_URL = 'http://your-api-url.com/phones.php';
+// Freehostia free plan has no SSL, so this is plain HTTP. Cleartext access to
+// this host is permitted via app.json (Android usesCleartextTraffic + iOS ATS).
+const BASE_URL = 'http://dlasala.duckdns.org/phones.php';
 
 const HEADERS: HeadersInit = {
   'Authorization': 'Bearer dwyn-students-api-8f92k3',

@@ -6,9 +6,9 @@ RewriteEngine On
 RewriteCond %{HTTP:Authorization} ^(.*)
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%1]
 
-# Force HTTPS (the app should call https:// directly to avoid this redirect on POST).
-RewriteCond %{HTTPS} off
-RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+# NOTE: HTTPS is intentionally NOT forced. This Freehostia free plan has no SSL
+# (port 443 is closed), so the API is served over plain HTTP. Do not add an
+# HTTP->HTTPS redirect here or every request will bounce to a dead port.
 
 # Block direct browser access to sensitive files.
 <FilesMatch "^(connection|auth)\.php$">

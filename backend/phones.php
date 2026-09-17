@@ -17,6 +17,11 @@
  * it comes from DuckDNS, FreeDNS, or Freehostia's own subdomain.
  */
 
+// Emit the shortest round-trippable float representation, so prices serialize
+// as e.g. 9999.99 instead of 9999.9899999999998 on servers with an old
+// serialize_precision default.
+ini_set('serialize_precision', '-1');
+
 header('Content-Type: application/json');
 // CORS — harmless for the native app, required for the Expo web build / Postman.
 header('Access-Control-Allow-Origin: *');
