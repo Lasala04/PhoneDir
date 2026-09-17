@@ -50,6 +50,13 @@
             "usesCleartextTraffic": true
           }
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "PhoneDir needs access to your photos so you can attach a product image.",
+          "cameraPermission": "PhoneDir needs camera access so you can photograph a product."
+        }
       ]
     ],
     "experiments": {

@@ -19,6 +19,7 @@ import Animated, {
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Phone } from '@/types/phone';
 import { getPhone, deletePhone } from '@/services/api';
+import InstrumentLoader from '@/components/InstrumentLoader';
 import { colors, font, radius, space, formatPrice, pad2 } from '@/constants/instrument';
 
 const HERO_HEIGHT = 300;
@@ -98,10 +99,7 @@ export default function PhoneDetailScreen() {
     return (
       <>
         <Stack.Screen options={{ title: 'LOADING…' }} />
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.accent} />
-          <Text style={styles.centerText}>FETCHING RECORD</Text>
-        </View>
+        <InstrumentLoader label="FETCHING RECORD" />
       </>
     );
   }

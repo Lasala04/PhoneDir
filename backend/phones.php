@@ -85,6 +85,43 @@ function requireId(): int {
     return (int) $id;
 }
 
+/**
+ * If the request carries an uploaded file in $_FILES['image'], validate it,
+ * save it under uploads/, and return its absolute URL. Returns null when no
+ * file was sent (so the caller keeps whatever image_url the form provided).
+ */
+function handleImageUpload(): ?string {
+    if (!isset($_FILES['image']) || $_FILES['image']['error'] === UPLOAD_ERR_NO_FILE) {
+        return null;
+    }
+    $f = $_FILES['image'];
+    if ($f['error'] !== UPLOAD_ERR_OK) {
+        respond(400, ['success' => false, 'message' => 'Image upload failed (code ' . $f['error'] . ').']);
+    }
+    if ($f['size'] > 5 * 1024 * 1024) {
+        respond(400, ['success' => false, 'message' => 'Image too large (max 5 MB).']);
+    }
+    $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
+    $mime = (new finfo(FILEINFO_MIME_TYPE))->file($f['tmp_name']);
+    if (!isset($allowed[$mime])) {
+        respond(400, ['success' => false, 'message' => 'Only JPG, PNG, WEBP, or GIF images are allowed.']);
+    }
+
+    $dir = __DIR__ . '/uploads';
+    if (!is_dir($dir) && !@mkdir($dir, 0755, true)) {
+        respond(500, ['success' => false, 'message' => 'Uploads folder is missing and could not be created.']);
+    }
+    $name = 'phone_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $allowed[$mime];
+    if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $name)) {
+        respond(500, ['success' => false, 'message' => 'Could not save the uploaded image.']);
+    }
+
+    // Absolute URL to the saved file (http — this host has no SSL).
+    $host = $_SERVER['HTTP_HOST'] ?? 'dlasala.duckdns.org';
+    $base = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/');
+    return 'http://' . $host . $base . '/uploads/' . $name;
+}
+
 // Resolve the effective method, honouring the _method override tunnel.
 $method = $_SERVER['REQUEST_METHOD'];
 if ($method === 'POST' && isset($_POST['_method'])) {
@@ -112,6 +149,10 @@ try {
 
         case 'POST': // create
             $p = readPhoneInput();
+            $uploaded = handleImageUpload();
+            if ($uploaded !== null) {
+                $p['image_url'] = $uploaded;
+            }
             $stmt = $pdo->prepare(
                 'INSERT INTO phones (name, brand, model, price, description, image_url)
                  VALUES (:name, :brand, :model, :price, :description, :image_url)'
@@ -135,6 +176,10 @@ try {
         case 'PUT': // update
             $id = requireId();
             $p = readPhoneInput();
+            $uploaded = handleImageUpload();
+            if ($uploaded !== null) {
+                $p['image_url'] = $uploaded;
+            }
             $stmt = $pdo->prepare(
                 'UPDATE phones
                     SET name = :name, brand = :brand, model = :model,

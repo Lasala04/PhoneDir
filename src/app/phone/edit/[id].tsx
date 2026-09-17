@@ -1,9 +1,10 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Phone } from '@/types/phone';
 import { getPhone, updatePhone } from '@/services/api';
 import PhoneForm, { PhoneFormValues } from '@/components/PhoneForm';
+import InstrumentLoader from '@/components/InstrumentLoader';
 import { colors, font, space } from '@/constants/instrument';
 
 export default function EditPhoneScreen() {
@@ -39,10 +40,7 @@ export default function EditPhoneScreen() {
     return (
       <>
         <Stack.Screen options={{ title: 'LOADING…' }} />
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.accent} />
-          <Text style={styles.centerText}>LOADING RECORD</Text>
-        </View>
+        <InstrumentLoader label="LOADING RECORD" />
       </>
     );
   }
@@ -58,8 +56,8 @@ export default function EditPhoneScreen() {
     );
   }
 
-  const handleUpdate = (values: PhoneFormValues) =>
-    updatePhone({ id: Number(id), ...values });
+  const handleUpdate = (values: PhoneFormValues, imageUri?: string) =>
+    updatePhone({ id: Number(id), ...values }, imageUri);
 
   return (
     <>

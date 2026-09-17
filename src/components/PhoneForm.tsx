@@ -13,6 +13,7 @@ import {
   Platform,
   KeyboardTypeOptions,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { Phone } from '@/types/phone';
 import { colors, font, radius, space } from '@/constants/instrument';
 
@@ -21,7 +22,7 @@ export type PhoneFormValues = Omit<Phone, 'id'>;
 interface PhoneFormProps {
   initial?: Partial<PhoneFormValues>;
   submitLabel: string;
-  onSubmit: (values: PhoneFormValues) => Promise<boolean>;
+  onSubmit: (values: PhoneFormValues, imageUri?: string) => Promise<boolean>;
   onSuccess: () => void;
   successMessage: string;
 }
@@ -88,9 +89,54 @@ export default function PhoneForm({
     initial?.price !== undefined ? String(initial.price) : ''
   );
   const [description, setDescription] = useState(initial?.description ?? '');
-  const [imageUrl, setImageUrl] = useState(initial?.image_url ?? '');
-  const [imgError, setImgError] = useState(false);
+  // Already-hosted image (edit mode); passed through unless replaced/removed.
+  const [existingUrl, setExistingUrl] = useState(initial?.image_url ?? '');
+  // Newly picked local file (device URI), uploaded on submit.
+  const [pickedUri, setPickedUri] = useState<string | undefined>(undefined);
+  const [pickedError, setPickedError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const previewUri = pickedUri ?? (existingUrl && !existingUrl.startsWith('data:') ? existingUrl : '');
+  const hasImage = !!previewUri && !pickedError;
+
+  const pickFromLibrary = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permission needed', 'Allow photo access to attach an image.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.6,
+    });
+    if (!result.canceled) {
+      setPickedUri(result.assets[0].uri);
+      setPickedError(false);
+    }
+  };
+
+  const takePhoto = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permission needed', 'Allow camera access to take a photo.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.6,
+    });
+    if (!result.canceled) {
+      setPickedUri(result.assets[0].uri);
+      setPickedError(false);
+    }
+  };
+
+  const removeImage = () => {
+    setPickedUri(undefined);
+    setExistingUrl('');
+    setPickedError(false);
+  };
 
   const handleSubmit = async () => {
     if (!name.trim() || !brand.trim() || !model.trim() || !price.trim()) {
@@ -104,14 +150,17 @@ export default function PhoneForm({
     }
 
     setSubmitting(true);
-    const ok = await onSubmit({
-      name: name.trim(),
-      brand: brand.trim(),
-      model: model.trim(),
-      price: parsedPrice,
-      description: description.trim(),
-      image_url: imageUrl.trim(),
-    });
+    const ok = await onSubmit(
+      {
+        name: name.trim(),
+        brand: brand.trim(),
+        model: model.trim(),
+        price: parsedPrice,
+        description: description.trim(),
+        image_url: existingUrl.trim(),
+      },
+      pickedUri
+    );
     setSubmitting(false);
 
     if (ok) {
@@ -120,9 +169,6 @@ export default function PhoneForm({
       Alert.alert('Error', 'Request failed. Please try again.');
     }
   };
-
-  const trimmedImg = imageUrl.trim();
-  const showPreview = trimmedImg.length > 0 && !imgError;
 
   return (
     <KeyboardAvoidingView
@@ -136,73 +182,59 @@ export default function PhoneForm({
       >
         <Text style={styles.formKicker}>◇ DATA ENTRY / FILL ALL REQUIRED FIELDS</Text>
 
-        <Field
-          index="01"
-          label="NAME"
-          required
-          value={name}
-          onChangeText={setName}
-          placeholder="Galaxy S24 Ultra"
-        />
-        <Field
-          index="02"
-          label="BRAND"
-          required
-          value={brand}
-          onChangeText={setBrand}
-          placeholder="Samsung"
-        />
-        <Field
-          index="03"
-          label="MODEL"
-          required
-          value={model}
-          onChangeText={setModel}
-          placeholder="SM-S928B"
-        />
-        <Field
-          index="04"
-          label="PRICE · PHP"
-          required
-          value={price}
-          onChangeText={(t) => setPrice(t)}
-          placeholder="74999.00"
-          keyboardType="numeric"
-        />
-        <Field
-          index="05"
-          label="DESCRIPTION"
-          value={description}
-          onChangeText={setDescription}
-          placeholder="Unit notes, specs, condition…"
-          multiline
-        />
-        <Field
-          index="06"
-          label="IMAGE URL"
-          value={imageUrl}
-          onChangeText={(t) => {
-            setImageUrl(t);
-            setImgError(false);
-          }}
-          placeholder="https://…/unit.jpg"
-          keyboardType="url"
-          autoCapitalize="none"
-        />
+        <Field index="01" label="NAME" required value={name} onChangeText={setName} placeholder="Galaxy S24 Ultra" />
+        <Field index="02" label="BRAND" required value={brand} onChangeText={setBrand} placeholder="Samsung" />
+        <Field index="03" label="MODEL" required value={model} onChangeText={setModel} placeholder="SM-S928B" />
+        <Field index="04" label="PRICE · PHP" required value={price} onChangeText={setPrice} placeholder="74999.00" keyboardType="numeric" />
+        <Field index="05" label="DESCRIPTION" value={description} onChangeText={setDescription} placeholder="Unit notes, specs, condition…" multiline />
 
-        {showPreview && (
-          <View style={styles.previewWrap}>
-            <Text style={styles.previewLabel}>FIG.01 — PREVIEW</Text>
+        {/* Image control */}
+        <View style={styles.field}>
+          <View style={styles.labelRow}>
+            <Text style={styles.labelIdx}>06</Text>
+            <Text style={styles.label}>IMAGE</Text>
+            <Text style={styles.opt}>OPT</Text>
+          </View>
+
+          {hasImage && (
             <View style={styles.previewFrame}>
               <Image
-                source={{ uri: trimmedImg }}
+                source={{ uri: previewUri }}
                 style={styles.previewImage}
                 resizeMode="cover"
-                onError={() => setImgError(true)}
+                onError={() => setPickedError(true)}
               />
+              <View style={styles.previewTag}>
+                <Text style={styles.previewTagText}>
+                  {pickedUri ? 'NEW UPLOAD' : 'CURRENT'}
+                </Text>
+              </View>
             </View>
+          )}
+
+          <View style={styles.imageButtons}>
+            <Pressable
+              style={({ pressed }) => [styles.imgBtn, pressed && styles.imgBtnPressed]}
+              onPress={pickFromLibrary}
+            >
+              <Text style={styles.imgBtnText}>⌾ GALLERY</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.imgBtn, pressed && styles.imgBtnPressed]}
+              onPress={takePhoto}
+            >
+              <Text style={styles.imgBtnText}>◉ CAMERA</Text>
+            </Pressable>
+            {hasImage && (
+              <Pressable
+                style={({ pressed }) => [styles.imgBtn, styles.imgBtnDanger, pressed && styles.imgBtnPressed]}
+                onPress={removeImage}
+              >
+                <Text style={[styles.imgBtnText, styles.imgBtnTextDanger]}>✕ REMOVE</Text>
+              </Pressable>
+            )}
           </View>
-        )}
+        </View>
 
         <Pressable
           style={({ pressed }) => [
@@ -239,31 +271,10 @@ const styles = StyleSheet.create({
   },
   field: { marginBottom: space.xl },
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.sm },
-  labelIdx: {
-    color: colors.textMute,
-    fontFamily: font.mono,
-    fontSize: 11,
-    letterSpacing: 1,
-  },
-  label: {
-    color: colors.text,
-    fontFamily: font.monoSemi,
-    fontSize: 12,
-    letterSpacing: 2,
-    flex: 1,
-  },
-  req: {
-    color: colors.accent,
-    fontFamily: font.monoBold,
-    fontSize: 9,
-    letterSpacing: 1.5,
-  },
-  opt: {
-    color: colors.textMute,
-    fontFamily: font.mono,
-    fontSize: 9,
-    letterSpacing: 1.5,
-  },
+  labelIdx: { color: colors.textMute, fontFamily: font.mono, fontSize: 11, letterSpacing: 1 },
+  label: { color: colors.text, fontFamily: font.monoSemi, fontSize: 12, letterSpacing: 2, flex: 1 },
+  req: { color: colors.accent, fontFamily: font.monoBold, fontSize: 9, letterSpacing: 1.5 },
+  opt: { color: colors.textMute, fontFamily: font.mono, fontSize: 9, letterSpacing: 1.5 },
   input: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,
@@ -277,22 +288,42 @@ const styles = StyleSheet.create({
   },
   inputFocused: { borderColor: colors.accentLine, backgroundColor: colors.surface2 },
   textArea: { minHeight: 104, paddingTop: space.md },
-  previewWrap: { marginBottom: space.xl },
-  previewLabel: {
-    color: colors.textMute,
-    fontFamily: font.mono,
-    fontSize: 10,
-    letterSpacing: 1.5,
-    marginBottom: space.sm,
-  },
   previewFrame: {
     borderWidth: 1,
     borderColor: colors.line,
     borderRadius: radius.md,
     overflow: 'hidden',
     backgroundColor: colors.surface,
+    marginBottom: space.md,
   },
   previewImage: { width: '100%', height: 200 },
+  previewTag: {
+    position: 'absolute',
+    left: space.sm,
+    bottom: space.sm,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.accentLine,
+    paddingHorizontal: space.sm,
+    paddingVertical: 3,
+    borderRadius: radius.sm,
+  },
+  previewTagText: { color: colors.accent, fontFamily: font.monoBold, fontSize: 9, letterSpacing: 1.5 },
+  imageButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  imgBtn: {
+    flexGrow: 1,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    paddingVertical: space.md,
+    paddingHorizontal: space.md,
+  },
+  imgBtnPressed: { borderColor: colors.accentLine, backgroundColor: colors.surface2 },
+  imgBtnDanger: { borderColor: colors.line },
+  imgBtnText: { color: colors.text, fontFamily: font.monoSemi, fontSize: 12, letterSpacing: 1.5 },
+  imgBtnTextDanger: { color: colors.danger },
   submit: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -311,10 +342,5 @@ const styles = StyleSheet.create({
   submitDisabled: { opacity: 0.6 },
   submitPressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
   submitGlyph: { color: colors.onAccent, fontFamily: font.monoBold, fontSize: 15 },
-  submitText: {
-    color: colors.onAccent,
-    fontFamily: font.monoBold,
-    fontSize: 14,
-    letterSpacing: 2,
-  },
+  submitText: { color: colors.onAccent, fontFamily: font.monoBold, fontSize: 14, letterSpacing: 2 },
 });

@@ -7,6 +7,8 @@ import {
   Pressable,
   RefreshControl,
   Animated as RNAnimated,
+  BackHandler,
+  Platform,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -15,6 +17,7 @@ import { Phone } from '@/types/phone';
 import { getPhones } from '@/services/api';
 import PhoneCard from '@/components/PhoneCard';
 import GridBackdrop from '@/components/GridBackdrop';
+import ShutdownOverlay from '@/components/ShutdownOverlay';
 import { colors, font, radius, space, pad2 } from '@/constants/instrument';
 
 function SkeletonCard() {
@@ -62,6 +65,7 @@ export default function PhoneListScreen() {
   const [phones, setPhones] = useState<Phone[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [exiting, setExiting] = useState(false);
 
   const fetchPhones = useCallback(async () => {
     const data = await getPhones();
@@ -73,6 +77,19 @@ export default function PhoneListScreen() {
     useCallback(() => {
       fetchPhones();
     }, [fetchPhones])
+  );
+
+  // Android: intercept back at the home screen to play a shutdown animation
+  // before the app exits. (No equivalent exists on iOS.)
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== 'android') return;
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        setExiting(true);
+        return true; // block the default immediate exit
+      });
+      return () => sub.remove();
+    }, [])
   );
 
   const onRefresh = useCallback(async () => {
@@ -152,6 +169,8 @@ export default function PhoneListScreen() {
           <Text style={styles.fabLabel}>NEW</Text>
         </Pressable>
       </SafeAreaView>
+
+      {exiting && <ShutdownOverlay onComplete={() => BackHandler.exitApp()} />}
     </View>
   );
 }

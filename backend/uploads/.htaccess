@@ -1,0 +1,8 @@
+# Uploaded files are served as static content only — never executed.
+# Block any script-like extension from running if it lands here.
+<FilesMatch "\.(php|phtml|php3|php4|php5|pht|pl|py|cgi|sh|asp|aspx)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+Options -Indexes
