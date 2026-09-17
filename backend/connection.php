@@ -2,10 +2,10 @@
 /**
  * Database connection (PDO).
  *
- * Replace the four placeholders below with the real values from your
- * Freehostia "Databases" tab. DB_HOST is almost always "localhost" on
- * shared hosting; DB_NAME/DB_USER are usually prefixed with your account
- * name, e.g. "yourusername_phones".
+ * Fill these in from your Freehostia "Databases" tab AFTER you create the
+ * new database (the old one is gone). On Freehostia, DB_HOST is normally
+ * "localhost" and DB_NAME/DB_USER are prefixed with your account name,
+ * e.g. "yourusername_phones".
  */
 define('DB_HOST', 'localhost');
 define('DB_NAME', 'yourusername_phones');

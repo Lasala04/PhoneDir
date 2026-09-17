@@ -1,5 +1,5 @@
 -- PhoneDir database schema.
--- Run this in phpMyAdmin (SQL tab) on your Freehostia database.
+-- Run this in phpMyAdmin (SQL tab) on your NEW Freehostia database.
 
 CREATE TABLE phones (
     id          INT AUTO_INCREMENT PRIMARY KEY,

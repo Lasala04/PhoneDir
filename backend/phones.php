@@ -12,6 +12,9 @@
  * The app posts multipart FormData (NOT a JSON body), so we read $_POST.
  * Shared hosting can't route native PUT/DELETE reliably, so the app tunnels
  * them through POST with a `_method` field, which we honour below.
+ *
+ * This file is DNS-agnostic: it does not care whether the domain in front of
+ * it comes from DuckDNS, FreeDNS, or Freehostia's own subdomain.
  */
 
 header('Content-Type: application/json');
