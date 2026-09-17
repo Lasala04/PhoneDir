@@ -4,18 +4,24 @@ import {
   Text,
   Image,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  Animated,
 } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  useAnimatedScrollHandler,
+  interpolate,
+  Extrapolation,
+  FadeInDown,
+} from 'react-native-reanimated';
+import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Phone } from '@/types/phone';
 import { getPhone, deletePhone } from '@/services/api';
-import { useFocusEffect } from 'expo-router';
+import { colors, font, radius, space, formatPrice, pad2 } from '@/constants/instrument';
 
-const PLACEHOLDER_IMAGE = 'https://via.placeholder.com/600x400.png?text=No+Image';
+const HERO_HEIGHT = 300;
 
 export default function PhoneDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -23,6 +29,21 @@ export default function PhoneDetailScreen() {
   const [phone, setPhone] = useState<Phone | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [imgError, setImgError] = useState(false);
+
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((e) => {
+    scrollY.value = e.contentOffset.y;
+  });
+
+  const heroStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: scrollY.value * 0.35 },
+      {
+        scale: interpolate(scrollY.value, [-140, 0], [1.28, 1], Extrapolation.CLAMP),
+      },
+    ],
+  }));
 
   useFocusEffect(
     useCallback(() => {
@@ -31,19 +52,15 @@ export default function PhoneDetailScreen() {
         try {
           setLoading(true);
           const data = await getPhone(Number(id));
-          if (isMounted) {
-            setPhone(data);
-          }
+          if (isMounted) setPhone(data);
         } catch {
           if (isMounted) {
-            Alert.alert('Error', 'Failed to load phone details.', [
+            Alert.alert('Error', 'Failed to load record.', [
               { text: 'Go Back', onPress: () => router.back() },
             ]);
           }
         } finally {
-          if (isMounted) {
-            setLoading(false);
-          }
+          if (isMounted) setLoading(false);
         }
       };
       fetchData();
@@ -55,8 +72,8 @@ export default function PhoneDetailScreen() {
 
   const handleDelete = () => {
     Alert.alert(
-      'Delete Phone',
-      `Are you sure you want to delete "${phone?.name}"? This action cannot be undone.`,
+      'Delete Record',
+      `Permanently remove "${phone?.name}" from the catalog? This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -67,11 +84,9 @@ export default function PhoneDetailScreen() {
             const success = await deletePhone(Number(id));
             setDeleting(false);
             if (success) {
-              Alert.alert('Deleted', 'Phone has been deleted.', [
-                { text: 'OK', onPress: () => router.back() },
-              ]);
+              router.back();
             } else {
-              Alert.alert('Error', 'Failed to delete phone. Please try again.');
+              Alert.alert('Error', 'Failed to delete record. Please try again.');
             }
           },
         },
@@ -79,19 +94,13 @@ export default function PhoneDetailScreen() {
     );
   };
 
-  const formattedPrice = phone
-    ? `₱${phone.price.toLocaleString('en-PH', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`
-    : '';
-
   if (loading) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Loading...' }} />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2979FF" />
+        <Stack.Screen options={{ title: 'LOADING…' }} />
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.accent} />
+          <Text style={styles.centerText}>FETCHING RECORD</Text>
         </View>
       </>
     );
@@ -100,206 +109,284 @@ export default function PhoneDetailScreen() {
   if (!phone) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Not Found' }} />
-        <View style={styles.loadingContainer}>
-          <Text style={styles.errorText}>Phone not found</Text>
+        <Stack.Screen options={{ title: 'NOT FOUND' }} />
+        <View style={styles.center}>
+          <Text style={styles.centerText}>RECORD NOT FOUND</Text>
         </View>
       </>
     );
   }
 
+  const showImage = !!phone.image_url && !imgError;
+
   return (
     <>
       <Stack.Screen
         options={{
-          title: phone.name,
+          title: `#${pad2(phone.id)}`,
           headerRight: () => (
             <View style={styles.headerActions}>
               <TouchableOpacity
                 onPress={() => router.push(`/phone/edit/${id}`)}
-                style={styles.headerButton}
+                style={styles.headerBtn}
               >
-                <Text style={styles.headerButtonText}>✏️</Text>
+                <Text style={styles.headerBtnText}>EDIT</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleDelete}
-                style={styles.headerButton}
+                style={[styles.headerBtn, styles.headerBtnDanger]}
                 disabled={deleting}
               >
                 {deleting ? (
-                  <ActivityIndicator size="small" color="#FF5252" />
+                  <ActivityIndicator size="small" color={colors.danger} />
                 ) : (
-                  <Text style={styles.headerButtonText}>🗑️</Text>
+                  <Text style={[styles.headerBtnText, styles.headerBtnTextDanger]}>DEL</Text>
                 )}
               </TouchableOpacity>
             </View>
           ),
         }}
       />
-      <ScrollView
+      <Animated.ScrollView
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
       >
-        {/* Hero Image */}
-        <Image
-          source={{ uri: phone.image_url || PLACEHOLDER_IMAGE }}
-          style={styles.heroImage}
-          resizeMode="cover"
-        />
+        {/* Hero */}
+        <View style={styles.heroWrap}>
+          {showImage ? (
+            <Animated.Image
+              source={{ uri: phone.image_url }}
+              style={[styles.hero, heroStyle]}
+              resizeMode="cover"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <Animated.View style={[styles.hero, styles.heroFallback, heroStyle]}>
+              <Text style={styles.heroFallbackText}>NO IMAGE</Text>
+            </Animated.View>
+          )}
+          <View style={styles.heroCaption}>
+            <Text style={styles.heroCaptionText}>FIG.01 — UNIT PREVIEW</Text>
+          </View>
+        </View>
 
-        {/* Content */}
-        <View style={styles.content}>
-          {/* Price Badge */}
-          <View style={styles.priceBadge}>
-            <Text style={styles.priceText}>{formattedPrice}</Text>
+        <Animated.View entering={FadeInDown.duration(400)} style={styles.content}>
+          {/* Identity */}
+          <Text style={styles.brand}>{phone.brand.toUpperCase()}</Text>
+          <Text style={styles.name}>{phone.name}</Text>
+
+          {/* Price readout */}
+          <View style={styles.priceBlock}>
+            <View style={styles.priceTick} />
+            <View>
+              <Text style={styles.priceLabel}>SRP · PHP</Text>
+              <Text style={styles.price}>{formatPrice(phone.price)}</Text>
+            </View>
           </View>
 
-          {/* Name */}
-          <Text style={styles.phoneName}>{phone.name}</Text>
-
-          {/* Details Grid */}
-          <View style={styles.detailsCard}>
-            <DetailRow label="Brand" value={phone.brand} />
-            <View style={styles.divider} />
-            <DetailRow label="Model" value={phone.model} />
-            <View style={styles.divider} />
-            <DetailRow label="Price" value={formattedPrice} accent />
+          {/* Spec sheet */}
+          <View style={styles.specCard}>
+            <Text style={styles.specHeader}>// SPECIFICATION</Text>
+            <SpecRow label="BRAND" value={phone.brand} />
+            <SpecRow label="MODEL" value={phone.model} />
+            <SpecRow label="UNIT ID" value={`#${pad2(phone.id)}`} />
+            <SpecRow label="PRICE" value={formatPrice(phone.price)} accent last />
           </View>
 
           {/* Description */}
           {phone.description ? (
-            <View style={styles.descriptionCard}>
-              <Text style={styles.descriptionLabel}>Description</Text>
-              <Text style={styles.descriptionText}>{phone.description}</Text>
+            <View style={styles.descCard}>
+              <Text style={styles.specHeader}>// DESCRIPTION</Text>
+              <Text style={styles.descText}>{phone.description}</Text>
             </View>
           ) : null}
-        </View>
-      </ScrollView>
+
+          <Text style={styles.footer}>— END OF RECORD —</Text>
+        </Animated.View>
+      </Animated.ScrollView>
     </>
   );
 }
 
-function DetailRow({
+function SpecRow({
   label,
   value,
   accent = false,
+  last = false,
 }: {
   label: string;
   value: string;
   accent?: boolean;
+  last?: boolean;
 }) {
   return (
-    <View style={styles.detailRow}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={[styles.detailValue, accent && styles.detailValueAccent]}>
-        {value}
-      </Text>
+    <View style={[styles.specRow, !last && styles.specRowBorder]}>
+      <Text style={styles.specLabel}>{label}</Text>
+      <Text style={[styles.specValue, accent && styles.specValueAccent]}>{value}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1, backgroundColor: colors.bg },
+  scrollContent: { paddingBottom: 48 },
+  center: {
     flex: 1,
-    backgroundColor: '#0D0D0D',
-  },
-  scrollContent: {
-    paddingBottom: 40,
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: '#0D0D0D',
+    backgroundColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: space.lg,
   },
-  errorText: {
-    color: '#999999',
-    fontSize: 16,
+  centerText: {
+    color: colors.textMute,
+    fontFamily: font.monoMed,
+    fontSize: 12,
+    letterSpacing: 2,
   },
-  headerActions: {
+  headerActions: { flexDirection: 'row', gap: space.sm },
+  headerBtn: {
+    borderWidth: 1,
+    borderColor: colors.accentLine,
+    borderRadius: radius.sm,
+    paddingHorizontal: space.sm,
+    paddingVertical: 4,
+  },
+  headerBtnDanger: { borderColor: colors.danger },
+  headerBtnText: {
+    color: colors.accent,
+    fontFamily: font.monoBold,
+    fontSize: 11,
+    letterSpacing: 1,
+  },
+  headerBtnTextDanger: { color: colors.danger },
+  heroWrap: {
+    height: HERO_HEIGHT,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+  },
+  hero: { width: '100%', height: HERO_HEIGHT },
+  heroFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  heroFallbackText: {
+    color: colors.textMute,
+    fontFamily: font.monoMed,
+    fontSize: 13,
+    letterSpacing: 3,
+  },
+  heroCaption: {
+    position: 'absolute',
+    left: space.xl,
+    bottom: space.md,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingHorizontal: space.sm,
+    paddingVertical: 3,
+    borderRadius: radius.sm,
+  },
+  heroCaptionText: {
+    color: colors.textDim,
+    fontFamily: font.mono,
+    fontSize: 9,
+    letterSpacing: 1.5,
+  },
+  content: { paddingHorizontal: space.xl, paddingTop: space.xl },
+  brand: {
+    color: colors.accent,
+    fontFamily: font.monoSemi,
+    fontSize: 11,
+    letterSpacing: 3,
+  },
+  name: {
+    color: colors.text,
+    fontFamily: font.black,
+    fontSize: 30,
+    letterSpacing: -1,
+    lineHeight: 34,
+    marginTop: space.sm,
+  },
+  priceBlock: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    gap: space.md,
+    marginTop: space.xl,
   },
-  headerButton: {
-    padding: 6,
+  priceTick: { width: 4, height: 42, backgroundColor: colors.accent },
+  priceLabel: {
+    color: colors.textMute,
+    fontFamily: font.mono,
+    fontSize: 9,
+    letterSpacing: 2,
+    marginBottom: 2,
   },
-  headerButtonText: {
-    fontSize: 20,
+  price: {
+    color: colors.text,
+    fontFamily: font.monoBold,
+    fontSize: 26,
+    letterSpacing: 0.5,
   },
-  heroImage: {
-    width: '100%',
-    height: 300,
-    backgroundColor: '#1A1A1A',
+  specCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    padding: space.lg,
+    marginTop: space.xxl,
   },
-  content: {
-    padding: 20,
-    gap: 20,
+  specHeader: {
+    color: colors.textMute,
+    fontFamily: font.monoSemi,
+    fontSize: 10,
+    letterSpacing: 2,
+    marginBottom: space.md,
   },
-  priceBadge: {
-    backgroundColor: '#2979FF',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  priceText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  phoneName: {
-    color: '#FFFFFF',
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  detailsCard: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 16,
-    padding: 20,
-  },
-  detailRow: {
+  specRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 4,
+    paddingVertical: space.md,
   },
-  detailLabel: {
-    color: '#888888',
-    fontSize: 15,
-    fontWeight: '500',
+  specRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.line },
+  specLabel: {
+    color: colors.textDim,
+    fontFamily: font.mono,
+    fontSize: 12,
+    letterSpacing: 1.5,
   },
-  detailValue: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
+  specValue: {
+    color: colors.text,
+    fontFamily: font.monoMed,
+    fontSize: 13,
+    letterSpacing: 0.5,
+    flexShrink: 1,
+    textAlign: 'right',
+    marginLeft: space.md,
   },
-  detailValueAccent: {
-    color: '#2979FF',
-    fontWeight: '700',
+  specValueAccent: { color: colors.accent, fontFamily: font.monoBold },
+  descCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    padding: space.lg,
+    marginTop: space.lg,
   },
-  divider: {
-    height: 1,
-    backgroundColor: '#2A2A2A',
-    marginVertical: 12,
+  descText: {
+    color: colors.textDim,
+    fontFamily: font.mono,
+    fontSize: 13,
+    lineHeight: 22,
   },
-  descriptionCard: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 16,
-    padding: 20,
-    gap: 12,
-  },
-  descriptionLabel: {
-    color: '#888888',
-    fontSize: 14,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  descriptionText: {
-    color: '#CCCCCC',
-    fontSize: 15,
-    lineHeight: 24,
+  footer: {
+    color: colors.textMute,
+    fontFamily: font.mono,
+    fontSize: 10,
+    letterSpacing: 2,
+    textAlign: 'center',
+    marginTop: space.xxl,
   },
 });
